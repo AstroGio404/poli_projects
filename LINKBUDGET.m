@@ -2,7 +2,7 @@ close all
 clear all
 clc
 
-%% README
+%% README - NOW OUTDATED, USE THE NEW VERSION ON THE MAIN BRANCH
 % 
 % INPUT: everything written in the DATA section, all those
 % variables can be modified depending on the system
