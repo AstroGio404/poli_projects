@@ -57,37 +57,36 @@ gs = [45.062932177699984, 7.659119150857138, 15, 240];
 
 % COM_SYS CHANNELS
 % data_layer = [framing size [bit], payload size [bit], compression rate, sample rate, # measurements per sample]
-data_science = [128, 2048, 0.3, 0.25, 2*11*7];
-data_TM = [128, 2048, 0.3, 0.25, 5];
+data_science = [128, 2048, 0.3, 0.25, 1344*9];
 
-datas = [data_science; data_TM];
-
-% physic_layer = [gain antenna [dB], beanwirdh [°], TX power [dBW], RX gain [dB], TX losses [dB], RX losses [dB], LNA NF [dB], is sat? 1/0]
-gs_S = [26, 7.5, 7, 56, 5, 5, 0.9, 0];
-gs_U = [12, 30, 18, 40, 4, 4, 0.4, 0];
-sat_S = [6, 80, 0, 0, 3, 3, 1, 1];
-sat_U = [0, 179, 0, 0, 3, 3, 1, 1];
+% physic_layer = [gain antenna [dB], beanwirdh [°], TX power [dBW], RX gain [dB], TX losses [dB], RX losses [dB], LNA NF [dB], Accuracy [°], is sat? 1/0]
+gs_S = [26, 7.5, 7, 56, 6, 6, 0.9, 0.5, 0];
+gs_U = [12, 30, 18, 40, 5, 5, 0.4, 0.5, 0];
+sat_S = [6.5, 80, 0, 0, 4.24, 4.24, 1, 30, 1];
+sat_U = [0, 179, 0, 0, 2.16, 2.16, 1, 30, 1];
+sat_U_beacon = [0, 179, -6, 0, 2.16, 2.16, 1, 30, 1];
 
 % channel_layer = [frequency [MHz], datarate [bit/s] required e0/n0 [dB], from/to]
 ch1 = [2100, 9600, 14, gs_S, sat_S];        % uplink comms
 ch2 = [438, 9600, 14, gs_U, sat_U];         % uplink comms
 ch3 = [2255, 512000, 14, sat_S, gs_S];      % downlink full/science s band
-ch4 = [438, 9600, 14, sat_U, gs_U];         % downlink beacon
-ch5 = [438, 19200, 14, sat_U, gs_U];        % downlink full uhf
-ch6 = [2255, 256000, 14, sat_S, gs_S];      % downlink contigency/telemetry
+ch4 = [2255, 350000, 14, sat_S, gs_S];      % downlink Test data volume S-Band
+ch5 = [2255, 256000, 14, sat_S, gs_S];      % downlink contigency/telemetry
+ch6 = [438, 19200, 14, sat_U, gs_U];        % downlink full uhf
+ch7 = [438, 9600, 14, sat_U_beacon, gs_U];  % downlink beacon
 
 % add the channel added to this matrix as a new row
-links = [ch1; ch2; ch3; ch4; ch5; ch6];
+links = [ch1; ch2; ch3; ch5; ch6; ch7];
 
 % link budget implementation
-implementation_loss = 5;
+implementation_loss = 3;
 
 % simulation time = (YEAR, MONTH, DAY, HOUR, MINUTE, SECOND)
 start = datetime(2027, 5, 1, 0, 0, 0, TimeZone="UTC");
-stop = datetime(2027, 5, 15, 0, 0, 0, TimeZone="UTC");
+stop = datetime(2027, 6, 1, 0, 0, 0, TimeZone="UTC");
 
 % sample rate [s]
-sample = 60;
+sample = 10;
 
 % satellite points to antenna? true/false
 sat_point = true;
@@ -138,10 +137,6 @@ for j = 1:size(elev_temp,2)
     end
 end
 
-% cleaning workspace of unused heavy variables
-clear elev_temp
-clear range_temp
-
 %% LINK-BUDGET
 %
 % atmospheric losses
@@ -150,7 +145,11 @@ tic
 atmoloss = zeros(size(elev,2),1)';
 temperature = zeros(size(elev,2),1)';
 pathloss = zeros(size(range,2),1)';
-k = 0;
+
+% waiting bar
+k=0;
+y = waitbar(1-(size(elev,2)-k)/size(elev,2), "Attenuation for frequency %s GHz");
+waitbar(0,f, "Attenuation calculations, this might take a while...")
 
 % calculation
 for j = 1:size(links,1)
@@ -158,8 +157,7 @@ for j = 1:size(links,1)
     pathloss(j,:) = fspl(range(1,:), physconst('LightSpeed')/freq);
     if freq > 1e9
         for i = 1:size(elev,2)
-            k = k+1;
-            waitbar((1-(size(elev,2)*size(links,1)-k)/(size(elev,2)*size(links,1))),f, "Attenuation calculations, this might take a while...")
+            waitbar(1-(size(elev,2)-i)/size(elev,2), y, sprintf("Attenuation for frequency %s GHz", freq/1e9));
             if elev(i) >= 5
                 cfg = p618Config('Frequency',freq, "ElevationAngle", elev(i), "Latitude", gs(1), "Longitude", gs(2));
                 [loss, ~, tsky] = p618PropagationLosses(cfg, "StationHeight",gs(4)/1000);
@@ -171,13 +169,15 @@ for j = 1:size(links,1)
             end
         end
     else
-        k = k+1;
         atmoloss(j,1:size(elev,2)) = 0;
         temperature(j,1:size(elev,2)) = 0;
     end
+    waitbar(1-(size(links,1)-j)/size(links,1),f, "Attenuation calculations, this might take a while...")
 end
 toc
+close(y)
 
+%% TO AVOIT
 % link budget calculation
 % pre allocation
 EIRP = zeros(size(links,1),1);
@@ -185,19 +185,22 @@ ISOTROPIC = zeros(size(links,1),3);
 TEMPERATURE_SYS = zeros(size(links,1),3);
 GT = zeros(size(links,1),3);
 EBN0 = zeros(size(links,1),3);
+pointing_loss = zeros(size(links,1),1);
 
 waitbar(0,f, "Link Budget Calculation")
 % calculation
 for j = 1:size(links,1)
-    waitbar((1-(size(links,1)-j/size(links,1))),f, "Link Budget Calculation")
+    waitbar((1-(size(links,1)-j)/size(links,1)),f, "Link Budget Calculation")
     % dividing in adverse, mean, favorable conditions for link budget
     lossvect = [max(pathloss(j,:)) + max(atmoloss(j,:)), mean(pathloss(j,:)) + mean(atmoloss(j,:)), min(pathloss(j,:)) + min(atmoloss(j,:))];
     tempvect = [max(temperature(j,:)), mean(temperature(j,:)), min(temperature(j,:))];
+    % pointing losses
+    pointing_loss(j,:) = 12*(deg2rad(links(j,11))/deg2rad(links(j,5)))^2 + 12*(deg2rad(links(j,20))/deg2rad(links(j,14)))^2;
     % link budget calculations
-    EIRP(j) = links(j,4)+links(j,6)+links(j,8);
-    ISOTROPIC(j,:) = EIRP(j) - lossvect - implementation_loss;
-    TEMPERATURE_SYS(j,:) = tempvect + 290*((10^(links(j,18)/10)-1)) + 290*(10^(links(j,17)/10)-1)/10^(links(j,15)/10);
-    GT(j,:) = links(j,12) - 10*log10(TEMPERATURE_SYS(j,:));
+    EIRP(j) = links(j,4)+links(j,6)-links(j,8);
+    ISOTROPIC(j,:) = EIRP(j) - lossvect - implementation_loss - pointing_loss(j);
+    TEMPERATURE_SYS(j,:) = tempvect + 290*((10^(links(j,19)/10)-1)) + 290*(10^(links(j,18)/10)-1)/10^(links(j,16)/10);
+    GT(j,:) = links(j,13) - 10*log10(TEMPERATURE_SYS(j,:));
     EBN0(j,:) = ISOTROPIC(j,:) + GT(j,:) + 228.6 - 10*log10(links(j,2));
 end
 waitbar(1,f, "Link Budget Calculation")
@@ -209,9 +212,19 @@ marg = table(MARGINS(:,1), MARGINS(:,2), MARGINS(:,3), VariableNames=["Adverse",
 stats = table(EIRP, ISOTROPIC(:,1), ISOTROPIC(:,2), ISOTROPIC(:,3), TEMPERATURE_SYS(:,1), TEMPERATURE_SYS(:,2), TEMPERATURE_SYS(:,3), GT(:,1), GT(:,2), GT(:,3), EBN0(:,1), EBN0(:,2), EBN0(:,3), ...
     VariableNames=["EIRP (dBW)", "Received Adv (dbW)", "Received Mean (dbW)", "Received Fav (dbW)", "Temperature Adv (K)", "Temperature Mean (K)", "Temperature Fav (K)", "G/T Adv (dB/K)", "G/T Mean (dB/K)", "G/T Fav (dB/K)",  "Eb/N0 Adv (dB)",  "Eb/N0 Mean (dB)",  "Eb/N0 Fav (dB)"]);
 
+
+% EB/N0 for inclination
+for j = 1:size(links,1)
+    EBN0_INC(j,:) = EIRP(j) - atmoloss(j,:) - pathloss(j,:) - pointing_loss(j) - implementation_loss + links(j,13) - 10*log10(temperature(j,:)+290*((10^(links(j,19)/10)-1)) + 290*(10^(links(j,18)/10)-1)/10^(links(j,16)/10)) + 228.6 - 10*log10(links(j,2));
+end
+
+% margins for inclination and channel
+MARGINS_INC = EBN0_INC - links(:,3);
+
 %% DATA VOLUME PT.1
-%
-% waitbar(0,f, "Data Volume and Accesses calculation")
+
+waitbar(0,f, "Data Volume and Accesses calculation")
+
 % data volume for each antenna
 h = 0;
 for i = 1:size(sat_antenna, 2)
@@ -224,7 +237,7 @@ for i = 1:size(sat_antenna, 2)
     flight_between_access_i = 0;
     for j = 1:(size(accesstab,1))
         if j == 1
-           flight_between_access_i (j,:) = 0;
+           flight_between_access_i (j,:) = seconds(t1(j) - start);
         elseif j == size(accesstab,1)
             flight_between_access_i (j,:) = flight_between_access_i(j-1);
         else
@@ -233,8 +246,7 @@ for i = 1:size(sat_antenna, 2)
     end
     
     % compressed payload calculation
-    measure_data = data_science(5)*32;
-    payload_data = (measure_data.*flight_between_access_i.*data_science(4)).*(1-data_science(3));
+    payload_data = (data_science(5).*flight_between_access_i.*data_science(4)).*(1-data_science(3));
     
     % size of frame
     dataframe = data_science(1)*floor(payload_data./data_science(2));
@@ -242,56 +254,49 @@ for i = 1:size(sat_antenna, 2)
     % net data downlinked and data produced between access
     data_to_downlink = (dataframe + payload_data);
     
+    % vector time
+    timevect = sort([accesstab.StartTime; accesstab.EndTime]);
+    
     % necessary for indexing of each downlink channel
     k = [];
     for j = 1:size(links,1)
-        if links(j,11) == 1
+        if links(j,12) == 1
             k = [k, j];
         end
     end
     
-    % vector time
-    timevect_before_access = [accesstab.StartTime];
-    timevect_after_access = [accesstab.EndTime];
-
     % residual and downlinked data for each downlink channel
     for m = k
-        respas_vect = 0;
         h = h+1;
         respas = 0;
-        down_linkable = duration*links(m, 2);
+        data = [];
 
-        for j = 2:size(data_to_downlink,1)
-            data_to_downlink_pass(j,1) = data_to_downlink(j,1) + respas;
-            respas = data_to_downlink_pass(j,1) - down_linkable(j,1);
+        down_linkable = [0; duration*links(m, 2)];
+        data_to_downlink_pass = [0; data_to_downlink];
+
+        for j = 1:(size(data_to_downlink_pass,1)-1)
+            respas = data_to_downlink_pass(j) - down_linkable(j);
             if respas < 0
                 respas = 0;
             end
-            respas_vect(j,1) = respas;
+            data_to_downlink_pass(j+1) = data_to_downlink_pass(j+1) + respas;
+            data = [data; data_to_downlink_pass(j); respas];
         end
-        % array containing data stamp at which the memory is registered
-        % in the data_history. For instance at every data to downlink is
-        % associated a starttime time stamp and at every respas_vect is
-        % associated a endtime time stamp. This way we have the history of
-        % the date before and after each passage over the ground station.
-        data_history(:,h) = {data_to_downlink, timevect_before_access, respas_vect, timevect_after_access};
+        data_history(:,h) = {data, timevect};
     end
 end
 
 waitbar(1,f, "Data Volume and Accesses calculation")
+pause(2)
 waitbar(1,f, "End Calculations")
 
 %% POST-PROCESSING ANALYSIS
 %
 % data volume plot
-figure("Name", "SATCOM SIMULATOR")
-sgtitle("OBC MEMORY VOLUME")
+figure("Name", "SATCOM SIMULATOR");
+sgtitle("OBC MEMORY VOLUME");
 h=0;
 for p = 1:size(data_history, 2)
-    
-    data_history_plot_x = [];
-    data_history_plot_y = [];
-   
     % counter for plots
     h=h+1;
     
@@ -301,23 +306,41 @@ for p = 1:size(data_history, 2)
     end
     
     % indexing and parsing the data history database
-    start_memory = data_history{1, p};
-    start_time = data_history{2, p};
-    stop_memory = data_history{3, p};
-    stop_time = data_history{4, p};
+    plot_y = data_history{1, p};
+    plot_x = data_history{2, p};
 
-    for i = 1:size(start_memory,1)
-        data_history_plot_x = [data_history_plot_x; start_time(i); stop_time(i)];
-        data_history_plot_y = [data_history_plot_y; start_memory(i); stop_memory(i)];    
-    end
-
+    % PLOTTING
     subplot(length(sat_antenna),length(k),p)
-    plot(data_history_plot_x, data_history_plot_y./1e6, "LineWidth",2)
+    plot(plot_x, plot_y./1e6, "LineWidth", 1.5, "Color", [0 0 0])
     ylabel("Net Mbits")
     xlabel("Time Frame")
     title(sprintf("%s Kbps", string(links(k(h),2)/1e3)))
 
 end
+
+% plot EBN0 for inclination and every link
+figure;
+hold on
+for j = 1:size(links,1)
+    plot(EBN0_INC(j,:), "LineWidth", 1.5)
+end
+ylabel("EB/N0 [dB]")
+xlabel("Time")
+legend([string(1:size(links,1))])
+hold off
+
+% plot MARGINS for inclination and every link
+figure;
+hold on
+yline(3, "LineWidth", 1, "LineStyle","--", "Color", "r")
+yline(6, "LineWidth", 1, "LineStyle","--", "Color", "b")
+for j = 1:size(links,1)
+    plot(MARGINS_INC(j,:), "LineWidth", 1.5)
+end
+ylabel("MARGINS [dB]")
+xlabel("Time")
+legend(["3dB Margin", "6dB Margin", string(1:size(links,1))])
+hold off
 
 % display table with link margins
 disp(marg)
@@ -326,7 +349,7 @@ disp(stats)
 % cool ground track and antenna FOVs
 fieldOfView(sat_antenna(1));
 fieldOfView(sat_antenna(2));
-groundTrack(sat, "LeadTime", 4*struct2table(orbitalElements(sat)).Period);
+groundTrack(sat, "LeadTime", 3*struct2table(orbitalElements(sat)).Period);
 satelliteScenarioViewer(ss, "Dimension","2D", "Basemap", "streets_dark", "ShowDetails", true);
 
 % close waitbar
