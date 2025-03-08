@@ -76,17 +76,17 @@ ch6 = [438, 19200, 14, sat_U, gs_U];        % downlink full uhf
 ch7 = [438, 9600, 14, sat_U_beacon, gs_U];  % downlink beacon
 
 % add the channel added to this matrix as a new row
-links = [ch1; ch2; ch3; ch5; ch6; ch7];
+links = [ch1; ch2; ch3; ch4; ch5; ch6; ch7];
 
 % link budget implementation
 implementation_loss = 3;
 
 % simulation time = (YEAR, MONTH, DAY, HOUR, MINUTE, SECOND)
 start = datetime(2027, 5, 1, 0, 0, 0, TimeZone="UTC");
-stop = datetime(2027, 6, 1, 0, 0, 0, TimeZone="UTC");
+stop = datetime(2027, 5, 15, 0, 0, 0, TimeZone="UTC");
 
 % sample rate [s]
-sample = 10;
+sample = 60;
 
 % satellite points to antenna? true/false
 sat_point = true;
@@ -145,6 +145,7 @@ tic
 atmoloss = zeros(size(elev,2),1)';
 temperature = zeros(size(elev,2),1)';
 pathloss = zeros(size(range,2),1)';
+freq_database = [];
 
 % waiting bar
 k=0;
@@ -156,18 +157,25 @@ for j = 1:size(links,1)
     freq = links(j,1)*1e6;
     pathloss(j,:) = fspl(range(1,:), physconst('LightSpeed')/freq);
     if freq > 1e9
-        for i = 1:size(elev,2)
-            waitbar(1-(size(elev,2)-i)/size(elev,2), y, sprintf("Attenuation for frequency %s GHz", freq/1e9));
-            if elev(i) >= 5
-                cfg = p618Config('Frequency',freq, "ElevationAngle", elev(i), "Latitude", gs(1), "Longitude", gs(2));
-                [loss, ~, tsky] = p618PropagationLosses(cfg, "StationHeight",gs(4)/1000);
-                atmoloss(j,i) = sum(struct2array(loss));
-                temperature(j,i) = tsky;
-            else
-                atmoloss(j,i) = 0;
-                temperature(j,i) = 0;
+        % to avoid redoing already done calculations
+        if ismember(freq, freq_database)
+            l = find(freq_database == freq);
+            atmoloss(j,:) = atmoloss(l(1),:);
+        else
+            for i = 1:size(elev,2)
+                waitbar(1-(size(elev,2)-i)/size(elev,2), y, sprintf("Attenuation for frequency %s GHz", freq/1e9));
+                if elev(i) >= 5
+                    cfg = p618Config('Frequency',freq, "ElevationAngle", elev(i), "Latitude", gs(1), "Longitude", gs(2));
+                    [loss, ~, tsky] = p618PropagationLosses(cfg, "StationHeight",gs(4)/1000);
+                    atmoloss(j,i) = sum(struct2array(loss));
+                    temperature(j,i) = tsky;
+                else
+                    atmoloss(j,i) = 0;
+                    temperature(j,i) = 0;
+                end
             end
         end
+        freq_database(j) = freq;
     else
         atmoloss(j,1:size(elev,2)) = 0;
         temperature(j,1:size(elev,2)) = 0;
