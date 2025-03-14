@@ -28,7 +28,7 @@ f = waitbar(0, "Starting Simulation", "Name", "SATCOM SIMULATOR");
 % Aerospace Engineer @ Polytechnic of Turin. 
 
 %% PREPARATION TO THE SIMULATION
-%
+
 % download all ITU maps and std models. As of 03/2025 they are all updated 
 % to latest.
 maps = exist('maps.mat','file');
@@ -50,30 +50,31 @@ end
 %% DATA
 %
 % sat_orbit = [altitude [KM], eccentricity [°], inclination [°], RAAN [°], perigee argument [°],  true anomaly [°]]
-sat_orbit = [450, 0, 97.2188, 0, 0, 0];
+sat_orbit = [450, 0, 97.2188, 10, 0, 0];
 
 % ground_station = [latitude [°], longitudine [°], minimum elevation [°], altitude [m]]
-gs = [45.062932177699984, 7.659119150857138, 15, 240];
+gs = [45.062932177699984, 7.659119150857138, 20, 280];
 
 % COM_SYS CHANNELS
 % data_layer = [framing size [bit], payload size [bit], compression rate, sample rate, # measurements per sample]
-data_science = [128, 2048, 0.3, 0.25, 1344*9];
+data_science = [128, 2048, 0.2, 1/60, 2080];        % 1344*6 science
+                                                    % 2080
 
 % physic_layer = [gain antenna [dB], beanwirdh [°], TX power [dBW], RX gain [dB], TX losses [dB], RX losses [dB], LNA NF [dB], Accuracy [°], is sat? 1/0]
-gs_S = [26, 7.5, 7, 56, 6, 6, 0.9, 0.5, 0];
+gs_S = [25, 7.5, 7, 56, 6, 6, 0.9, 0.5, 0];
 gs_U = [12, 30, 18, 40, 5, 5, 0.4, 0.5, 0];
 sat_S = [6.5, 80, 0, 0, 4.24, 4.24, 1, 30, 1];
 sat_U = [0, 179, 0, 0, 2.16, 2.16, 1, 30, 1];
 sat_U_beacon = [0, 179, -6, 0, 2.16, 2.16, 1, 30, 1];
 
 % channel_layer = [frequency [MHz], datarate [bit/s] required e0/n0 [dB], from/to]
-ch1 = [2100, 9600, 14, gs_S, sat_S];        % uplink comms
-ch2 = [438, 9600, 14, gs_U, sat_U];         % uplink comms
-ch3 = [2255, 512000, 14, sat_S, gs_S];      % downlink full/science s band
-ch4 = [2255, 350000, 14, sat_S, gs_S];      % downlink Test data volume S-Band
-ch5 = [2255, 256000, 14, sat_S, gs_S];      % downlink contigency/telemetry
-ch6 = [438, 19200, 14, sat_U, gs_U];        % downlink full uhf
-ch7 = [438, 9600, 14, sat_U_beacon, gs_U];  % downlink beacon
+ch1 = [2100, 9600, 14, gs_S, sat_S];            % uplink TC
+ch2 = [438, 9600, 14, gs_U, sat_U];             % uplink TC
+ch3 = [2255, 512000, 14, sat_S, gs_S];          % downlink full/science S-BAND
+ch4 = [2255, 387000, 14, sat_S, gs_S];          % downlink Test data volume S-BAND
+ch5 = [2255, 256000, 14, sat_S, gs_S];          % downlink contigency/TM
+ch6 = [438, 19200, 14, sat_U, gs_U];            % downlink full UHF
+ch7 = [438, 9600, 14, sat_U_beacon, gs_U];      % downlink beacon
 
 % add the channel added to this matrix as a new row
 links = [ch1; ch2; ch3; ch4; ch5; ch6; ch7];
@@ -83,10 +84,10 @@ implementation_loss = 3;
 
 % simulation time = (YEAR, MONTH, DAY, HOUR, MINUTE, SECOND)
 start = datetime(2027, 5, 1, 0, 0, 0, TimeZone="UTC");
-stop = datetime(2027, 5, 15, 0, 0, 0, TimeZone="UTC");
-
+stop = datetime(2027, 7, 1, 0, 0, 0, TimeZone="UTC");
+    
 % sample rate [s]
-sample = 60;
+sample = 20;
 
 % satellite points to antenna? true/false
 sat_point = true;
@@ -108,21 +109,11 @@ if sat_point
     pointAt(sat_gimbal, gs_ss);
 end
 
-% satellite antennas
+% satellite antennas for access calculation
 sat_antenna1 = conicalSensor(sat_gimbal, "MaxViewAngle", sat_S(1,2));
 sat_antenna2 = conicalSensor(sat_gimbal, "MaxViewAngle", sat_U(1,2));
 
 sat_antenna = [sat_antenna1, sat_antenna2];
-
-% % to check
-% for j = 1:size(links,1)
-%     if links(j,12) == 1
-%         sat_antenna1 = conicalSensor(sat_gimbal, "MaxViewAngle", links(j,5));
-%         sat_antenna(j) = sat_antenna_i;
-%     else
-%         continue
-%     end
-% end
 
 % range and elevation calculations
 [~,elev_temp,range_temp] = aer(gs_ss,sat);
@@ -161,6 +152,7 @@ for j = 1:size(links,1)
         if ismember(freq, freq_database)
             l = find(freq_database == freq);
             atmoloss(j,:) = atmoloss(l(1),:);
+            temperature(j,:) = temperature(l(1),:);
         else
             for i = 1:size(elev,2)
                 waitbar(1-(size(elev,2)-i)/size(elev,2), y, sprintf("Attenuation for frequency %s GHz", freq/1e9));
@@ -185,7 +177,6 @@ end
 toc
 close(y)
 
-%% TO AVOIT
 % link budget calculation
 % pre allocation
 EIRP = zeros(size(links,1),1);
@@ -194,6 +185,8 @@ TEMPERATURE_SYS = zeros(size(links,1),3);
 GT = zeros(size(links,1),3);
 EBN0 = zeros(size(links,1),3);
 pointing_loss = zeros(size(links,1),1);
+POWER_FLUX_DENS = zeros(size(links,1),3);
+EBN0_INC = zeros(size(links,1), size(elev,2));
 
 waitbar(0,f, "Link Budget Calculation")
 % calculation
@@ -202,11 +195,13 @@ for j = 1:size(links,1)
     % dividing in adverse, mean, favorable conditions for link budget
     lossvect = [max(pathloss(j,:)) + max(atmoloss(j,:)), mean(pathloss(j,:)) + mean(atmoloss(j,:)), min(pathloss(j,:)) + min(atmoloss(j,:))];
     tempvect = [max(temperature(j,:)), mean(temperature(j,:)), min(temperature(j,:))];
+    psdvect = [10*log10(4*pi*max(range)^2), 10*log10(4*pi*mean(range)^2), 10*log10(4*pi*min(range)^2)];
     % pointing losses
     pointing_loss(j,:) = 12*(deg2rad(links(j,11))/deg2rad(links(j,5)))^2 + 12*(deg2rad(links(j,20))/deg2rad(links(j,14)))^2;
     % link budget calculations
     EIRP(j) = links(j,4)+links(j,6)-links(j,8);
     ISOTROPIC(j,:) = EIRP(j) - lossvect - implementation_loss - pointing_loss(j);
+    POWER_FLUX_DENS(j,:) = ISOTROPIC(j,:) - psdvect;
     TEMPERATURE_SYS(j,:) = tempvect + 290*((10^(links(j,19)/10)-1)) + 290*(10^(links(j,18)/10)-1)/10^(links(j,16)/10);
     GT(j,:) = links(j,13) - 10*log10(TEMPERATURE_SYS(j,:));
     EBN0(j,:) = ISOTROPIC(j,:) + GT(j,:) + 228.6 - 10*log10(links(j,2));
@@ -217,8 +212,8 @@ waitbar(1,f, "Link Budget Calculation")
 MARGINS = EBN0 - links(:,3);
 
 marg = table(MARGINS(:,1), MARGINS(:,2), MARGINS(:,3), VariableNames=["Adverse", "Mean", "Favourable"]);
-stats = table(EIRP, ISOTROPIC(:,1), ISOTROPIC(:,2), ISOTROPIC(:,3), TEMPERATURE_SYS(:,1), TEMPERATURE_SYS(:,2), TEMPERATURE_SYS(:,3), GT(:,1), GT(:,2), GT(:,3), EBN0(:,1), EBN0(:,2), EBN0(:,3), ...
-    VariableNames=["EIRP (dBW)", "Received Adv (dbW)", "Received Mean (dbW)", "Received Fav (dbW)", "Temperature Adv (K)", "Temperature Mean (K)", "Temperature Fav (K)", "G/T Adv (dB/K)", "G/T Mean (dB/K)", "G/T Fav (dB/K)",  "Eb/N0 Adv (dB)",  "Eb/N0 Mean (dB)",  "Eb/N0 Fav (dB)"]);
+stats = table(EIRP, ISOTROPIC(:,1), ISOTROPIC(:,2), ISOTROPIC(:,3), POWER_FLUX_DENS(:,1), POWER_FLUX_DENS(:,2), POWER_FLUX_DENS(:,3), TEMPERATURE_SYS(:,1), TEMPERATURE_SYS(:,2), TEMPERATURE_SYS(:,3), GT(:,1), GT(:,2), GT(:,3), EBN0(:,1), EBN0(:,2), EBN0(:,3), ...
+    VariableNames=["EIRP (dBW)", "Received Adv (dBW)", "Received Mean (dBW)", "Received Fav (dBW)", "PFD Adv (dBW/m^2)", "PFD Mean (dBW/m^2)", "PFD Fav (dBW/m^2)", "Temperature Adv (K)", "Temperature Mean (K)", "Temperature Fav (K)", "G/T Adv (dB/K)", "G/T Mean (dB/K)", "G/T Fav (dB/K)",  "Eb/N0 Adv (dB)",  "Eb/N0 Mean (dB)",  "Eb/N0 Fav (dB)"]);
 
 
 % EB/N0 for inclination
@@ -355,10 +350,12 @@ disp(marg)
 disp(stats)
 
 % cool ground track and antenna FOVs
-fieldOfView(sat_antenna(1));
-fieldOfView(sat_antenna(2));
-groundTrack(sat, "LeadTime", 3*struct2table(orbitalElements(sat)).Period);
-satelliteScenarioViewer(ss, "Dimension","2D", "Basemap", "streets_dark", "ShowDetails", true);
+if false
+    fieldOfView(sat_antenna(1));
+    fieldOfView(sat_antenna(2));
+    groundTrack(sat, "LeadTime", 3*struct2table(orbitalElements(sat)).Period);
+    satelliteScenarioViewer(ss, "Dimension","2D", "Basemap", "streets_dark", "ShowDetails", true);
+end
 
 % close waitbar
 close(f);
