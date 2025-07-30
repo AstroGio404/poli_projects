@@ -6,8 +6,6 @@ warning("off", "all")
 f = waitbar(0, "Starting Simulation", "Name", "SATCOM SIMULATOR");
 
 %% README
-% 
-% pretty much STK on matlab. 
 %
 % INPUT: everything written in the DATA section, all those
 % variables can be modified depending on the system and channels you want
@@ -19,15 +17,14 @@ f = waitbar(0, "Starting Simulation", "Name", "SATCOM SIMULATOR");
 %
 % !! Takes around 30 minutes for a month of simulation. !!
 %
-% Made for the ESA: FYS! DB2, CPT: ELECTRA, GS: C3, modular enough to be 
+% Made for the ESA: FYS! DB2, ELECTRA, GS: C3, modular enough to be 
 % used for every cubesat mission design and every ground station.
 %
 % TBA: doppler effect calculation, skygraphs, signal generators.
 %
-% made by giorgio.abbate@studenti.polito.it, IT9JQK.
-% Aerospace Engineer @ Polytechnic of Turin. 
+% for help: giorgio.abbate@studenti.polito.it
 
-%% PREPARATION TO THE SIMULATION
+%% PREPARATION FOR THE SIMULATION
 
 % download all ITU maps and std models. As of 03/2025 they are all updated 
 % to latest.
@@ -47,21 +44,23 @@ if ~all(matFiles)
     addpath(cd);
 end
 
-%% DATA
-%
+%% DATA INPUT
+
 % sat_orbit = [altitude [KM], eccentricity [°], inclination [°], RAAN [°], perigee argument [°],  true anomaly [°]]
-sat_orbit = [450, 0, 97.2188, 0, 0, 0];
+sat_orbit = [450, 0, 97.2188, 0, 0, 0];     
 
 % ground_station = [latitude [°], longitudine [°], minimum elevation [°], altitude [m]]
-gs = [45.062932177699984, 7.659119150857138, 10, 280];
+gs = [45.062932177699984, 7.659119150857138, 5, 280];
 
 % COM_SYS CHANNELS
 % data_layer = [framing size [bit], payload size [bit], compression rate, sample rate, # measurements per sample]
-data_science = [128, 2048, 0.2, 1/60, 2080];      % 1344*6 science
-                                                    % 2080 telemetry
+data_science = [128, 2048, 0.3, 1, 960*12];        % 960*12 FULL science
+                                                   % 640*12 TEC-MODE
+                                                   % 832*12 POD-MODE
+                                                   % 2080 telemetry
 
 % physic_layer = [gain antenna [dB], beanwirdh [°], TX power [dBW], RX gain [dB], TX losses [dB], RX losses [dB], LNA NF [dB], Accuracy [°], is sat? 1/0]
-gs_S = [25, 7.5, 7, 56, 6, 6, 0.9, 0.5, 0];
+gs_S = [26, 7.5, 7, 56, 6, 6, 0.9, 0.5, 0];
 gs_U = [12, 30, 18, 40, 5, 5, 0.4, 0.5, 0];
 sat_S = [6.5, 80, 0, 0, 4.24, 4.24, 2, 15, 1];
 sat_U = [0, 179, 0, 0, 2.16, 2.16, 1, 15, 1];
@@ -80,20 +79,20 @@ ch7 = [438.555, 9600, 14, sat_U_beacon, gs_U];      % downlink beacon
 links = [ch1; ch2; ch3; ch4; ch5; ch6; ch7];
 
 % link budget implementation
-implementation_loss = 1.5;
+implementation_loss = 1;
 
 % simulation time = (YEAR, MONTH, DAY, HOUR, MINUTE, SECOND)
 start = datetime(2027, 5, 1, 0, 0, 0, TimeZone="UTC");
-stop = datetime(2027, 5, 5, 0, 0, 0, TimeZone="UTC");
+stop = datetime(2027, 5, 11, 0, 0, 0, TimeZone="UTC");
     
 % sample rate [s]
-sample = 60;
+sample = 30;
 
 % satellite points to antenna? true/false
 sat_point = true;
 
-%% SCENERY CONFIGURATION
-%
+%% SCENERY CONFIGURATION AND ORBITAL PROPAGATION
+
 % scenario definition
 ss = satelliteScenario(start, stop, sample);
 
@@ -128,9 +127,8 @@ for j = 1:size(elev_temp,2)
     end
 end
 
-%% LINK-BUDGET
-%
-% atmospheric losses
+%% LOSSES COMPUTATION
+
 tic
 % pre allocation
 atmoloss = zeros(size(elev,2),1)';
@@ -143,7 +141,7 @@ k=0;
 y = waitbar(1-(size(elev,2)-k)/size(elev,2), "Attenuation for frequency %s GHz");
 waitbar(0,f, "Attenuation calculations, this might take a while...")
 
-% calculation
+% calculation atmospheric losses, temperature, fpsl
 for j = 1:size(links,1)
     freq = links(j,1)*1e6;
     pathloss(j,:) = fspl(range(1,:), physconst('LightSpeed')/freq);
@@ -177,9 +175,8 @@ end
 toc
 close(y)
 
-%% FOR CALCULATIONS
+%% LINK BUDGET CALCULATIONS
 
-% link budget calculation
 % pre allocation
 EIRP = zeros(size(links,1),3);
 ISOTROPIC = zeros(size(links,1),3);
@@ -191,7 +188,7 @@ POWER_FLUX_DENS = zeros(size(links,1),3);
 
 waitbar(0,f, "Link Budget Calculation")
 
-% matrix invariants for elevations
+% matrix invariant for elevations
 for j = 1:size(links,1)
     % waitbar((1-(size(links,1)-j)/size(links,1)),f, "Link Budget Calculation")
     % dividing in adverse, mean, favorable conditions for link budget
@@ -204,11 +201,17 @@ for j = 1:size(links,1)
     EIRP(j,:) = [(links(j,4)+links(j,6)-links(j,8))-abs((links(j,4)+links(j,6)-links(j,8))*0.30), (links(j,4)+links(j,6)-links(j,8))-abs((links(j,4)+links(j,6)-links(j,8))*0.15), links(j,4)+links(j,6)-links(j,8)];
 end
 
-% matrix variants for elevations
+% matrix variant for elevations
 for i = 1:size(lossvect,2)
     for j = 1:size(links,1)
     ISOTROPIC(j,:) = EIRP(j) - lossvect(j,i) - implementation_loss - pointing_loss(j,:);
     POWER_FLUX_DENS(j,:) = ISOTROPIC(j,:) - psdvect;
+    if tempvect(j,i) == 0
+        tempvect(j,i) = 35;
+    end
+    if links(j, 21) == 1
+        tempvect(j,i) = 290;
+    end
     TEMPERATURE_SYS(j,:) = tempvect(j,i) + 290*((10^(links(j,19)/10)-1)) + 290*(10^(links(j,18)/10)-1)/10^(links(j,16)/10);
     GT(j,:) = links(j,13) - 10*log10(TEMPERATURE_SYS(j,:));
     EBN0(j,:) = ISOTROPIC(j,:) + GT(j,:) + 228.6 - 10*log10(links(j,2));
@@ -304,7 +307,7 @@ pause(2)
 waitbar(1,f, "End Calculations")
 
 %% POST-PROCESSING ANALYSIS
-%
+
 % data volume plot
 figure("Name", "SATCOM SIMULATOR");
 sgtitle("OBC MEMORY VOLUME");
@@ -312,37 +315,32 @@ h=0;
 for p = 1:size(data_history, 2)
     % counter for plots
     h=h+1;
-    
     % to iterate subplots (channels) for each antenna
     if h > length(k)
         h=1;
     end
-    
     % indexing and parsing the data history database
     plot_y = data_history{1, p};
     plot_x = data_history{2, p};
-
     % PLOTTING
     subplot(length(sat_antenna),length(k),p)
     plot(plot_x, plot_y./1e6, "LineWidth", 1.5, "Color", [0 0 0])
     ylabel("Net Mbits")
     xlabel("Time Frame")
     title(sprintf("%s Kbps", string(links(k(h),2)/1e3)))
-
 end
 
 % plot MARGINS for inclination and every link
 for j = 1:size(LNK_INC_MRG,1)
     figure;
     yline(3, "LineWidth", 1, "LineStyle","--", "Color", "r")
-    yline(6, "LineWidth", 1, "LineStyle","--", "Color", "b")
     ylabel("MARGINS [dB]")
     xlabel(sprintf("Interpolation points with sample rate of %d Hz", sample))
     hold on
     for i = 1:size(LNK_INC_MRG,2)
         plot(LNK_INC_MRG{j,i}, "LineWidth", 1.5)
     end
-    legend(["3dB Margin", "6dB Margin", "Adverse", "Nominal", "Favorable"])
+    legend(["3dB Margin", "Adverse", "Nominal", "Favorable"])
     hold off
 end
 
@@ -364,5 +362,5 @@ if true
     satelliteScenarioViewer(ss, "Dimension","2D", "Basemap", "streets_dark", "ShowDetails", true);
 end
 
-% close waitbar
+close waitbar
 close(f);
