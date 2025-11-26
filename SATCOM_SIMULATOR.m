@@ -47,33 +47,30 @@ end
 %% DATA INPUT
 
 % sat_orbit = [altitude [KM], eccentricity [°], inclination [°], RAAN [°], perigee argument [°],  true anomaly [°]]
-sat_orbit = [450, 0, 97.2188, 0, 0, 0];     
+sat_orbit = [500, 0, 97.22, 0, 0, 0];     
 
 % ground_station = [latitude [°], longitudine [°], minimum elevation [°], altitude [m]]
 gs = [45.062932177699984, 7.659119150857138, 5, 280];
 
 % COM_SYS CHANNELS
 % data_layer = [framing size [bit], payload size [bit], compression rate, sample rate, # measurements per sample]
-data_science = [128, 2048, 0.3, 1, 960*12];        % 960*12 FULL science
-                                                   % 640*12 TEC-MODE
-                                                   % 832*12 POD-MODE
-                                                   % 2080 telemetry
+data_science = [128, 2048, 0.3, 10, 904*13];        % 960*12 FULL science
 
-% physic_layer = [gain antenna [dB], beanwirdh [°], TX power [dBW], RX gain [dB], TX losses [dB], RX losses [dB], LNA NF [dB], Accuracy [°], is sat? 1/0]
-gs_S = [26, 7.5, 7, 56, 6, 6, 0.9, 0.5, 0];
-gs_U = [12, 30, 18, 40, 5, 5, 0.4, 0.5, 0];
-sat_S = [6.5, 80, 0, 0, 4.24, 4.24, 2, 15, 1];
-sat_U = [0, 179, 0, 0, 2.16, 2.16, 1, 15, 1];
+% physic_layer = [gain antenna [dB], beanwirdh [°], TX power [dBW], RX gain [dB], TX losses [dB], RX losses [dB], LNA NF [dB], Accuracy [°], is it on sat? 1/0]
+gs_S = [26, 7.5, 7, 56, 3, 3, 0.9, 0.5, 0];
+gs_U = [12, 30, 18, 40, 4, 4, 0.4, 0.5, 0];
+sat_S = [6.5, 80, 7, 0, 2.08, 2.08, 2, 15, 1];
+sat_U = [0, 179, 0, 0, 1.67, 1.67, 1, 15, 1];
 sat_U_beacon = [0, 179, -6, 0, 2.16, 2.16, 1, 15, 1];
 
 % channel_layer = [frequency [MHz], datarate [bit/s] required e0/n0 [dB], from/to]
-ch1 = [2056, 9600, 14, gs_S, sat_S];                % uplink TC
-ch2 = [437.555, 9600, 14, gs_U, sat_U];             % uplink TC
-ch3 = [2255, 512000, 14, sat_S, gs_S];              % downlink full/science S-BAND
-ch4 = [2255, 387000, 14, sat_S, gs_S];              % downlink Test data volume S-BAND
-ch5 = [2255, 256000, 14, sat_S, gs_S];              % downlink contigency/TM
-ch6 = [438.555, 19200, 14, sat_U, gs_U];            % downlink full UHF
-ch7 = [438.555, 9600, 14, sat_U_beacon, gs_U];      % downlink beacon
+ch1 = [2056, 9600, 9.5, gs_S, sat_S];                % uplink TC
+ch2 = [437.555, 9600, 9.5, gs_U, sat_U];             % uplink TC
+ch3 = [2255, 5e6, 9.5, sat_S, gs_S];              % downlink full/science S-BAND
+ch4 = [2255, 4e6, 9.5, sat_S, gs_S];              % downlink Test data volume S-BAND
+ch5 = [2255, 3e6, 9.5, sat_S, gs_S];              % downlink contigency/TM
+ch6 = [438.555, 19200, 9.5, sat_U, gs_U];            % downlink full UHF
+ch7 = [438.555, 9600, 9.5, sat_U_beacon, gs_U];      % downlink beacon
 
 % add the channel added to this matrix as a new row
 links = [ch1; ch2; ch3; ch4; ch5; ch6; ch7];
@@ -83,10 +80,10 @@ implementation_loss = 1;
 
 % simulation time = (YEAR, MONTH, DAY, HOUR, MINUTE, SECOND)
 start = datetime(2027, 5, 1, 0, 0, 0, TimeZone="UTC");
-stop = datetime(2027, 5, 11, 0, 0, 0, TimeZone="UTC");
+stop = datetime(2027, 5, 3, 0, 0, 0, TimeZone="UTC");
     
 % sample rate [s]
-sample = 30;
+sample = 60;
 
 % satellite points to antenna? true/false
 sat_point = true;
@@ -204,8 +201,9 @@ end
 % matrix variant for elevations
 for i = 1:size(lossvect,2)
     for j = 1:size(links,1)
-    ISOTROPIC(j,:) = EIRP(j) - lossvect(j,i) - implementation_loss - pointing_loss(j,:);
+    ISOTROPIC(j,:) = EIRP(j,:) - lossvect(j,i) - implementation_loss - pointing_loss(j,:);
     POWER_FLUX_DENS(j,:) = ISOTROPIC(j,:) - psdvect;
+
     if tempvect(j,i) == 0
         tempvect(j,i) = 35;
     end
@@ -239,7 +237,7 @@ end
 
 %% DATA VOLUME PT.1
 
-waitbar(0,f, "Data Volume and Accesses calculation")
+% waitbar(0,f, "Data Volume and Accesses calculation")
 
 % data volume for each antenna
 h = 0;
@@ -355,7 +353,7 @@ for j = 1:size(LNK_STATS,1)
 end
 
 % cool ground track and antenna FOVs
-if true
+if false
     fieldOfView(sat_antenna(1));
     fieldOfView(sat_antenna(2));
     groundTrack(sat, "LeadTime", 3*struct2table(orbitalElements(sat)).Period);
