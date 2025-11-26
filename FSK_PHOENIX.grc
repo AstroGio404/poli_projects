@@ -332,7 +332,7 @@ blocks:
     alias: ''
     append: 'False'
     comment: ''
-    file: C:\Users\giorg\Desktop\output.dmp
+    file: /home/giorgio/output.txt
     type: byte
     unbuffered: 'False'
     vlen: '1'
@@ -350,7 +350,7 @@ blocks:
     alias: ''
     begin_tag: pmt.PMT_NIL
     comment: ''
-    file: C:\Users\giorg\Desktop\input.dmp
+    file: /home/giorgio/input.txt
     length: '0'
     maxoutbuf: '0'
     minoutbuf: '0'
@@ -363,6 +363,23 @@ blocks:
     bus_source: false
     bus_structure: null
     coordinate: [48, 784.0]
+    rotation: 0
+    state: enabled
+- name: blocks_message_strobe_0
+  id: blocks_message_strobe
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: ''
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    msg: pmt.make_dict()
+    period: '2000'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [1328, 812.0]
     rotation: 0
     state: enabled
 - name: blocks_multiply_const_vxx_0
@@ -498,27 +515,6 @@ blocks:
     bus_source: false
     bus_structure: null
     coordinate: [352, 688.0]
-    rotation: 0
-    state: enabled
-- name: blocks_throttle2_2
-  id: blocks_throttle2
-  parameters:
-    affinity: ''
-    alias: ''
-    comment: ''
-    ignoretag: 'True'
-    limit: auto
-    maximum: '0.1'
-    maxoutbuf: '0'
-    minoutbuf: '0'
-    samples_per_second: '12000'
-    type: byte
-    vlen: '1'
-  states:
-    bus_sink: false
-    bus_source: false
-    bus_structure: null
-    coordinate: [848, 816.0]
     rotation: 0
     state: enabled
 - name: blocks_uchar_to_float_1
@@ -684,7 +680,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1408, 824.0]
+    coordinate: [1536, 820.0]
     rotation: 0
     state: true
 - name: pdu_pdu_to_tagged_stream_1
@@ -718,7 +714,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1008, 824.0]
+    coordinate: [904, 820.0]
     rotation: 0
     state: true
 - name: qtgui_eye_sink_x_0
@@ -1087,7 +1083,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1224, 816.0]
+    coordinate: [1136, 812.0]
     rotation: 0
     state: true
 - name: virtual_sink_0
@@ -1113,7 +1109,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1616, 824.0]
+    coordinate: [1744, 820.0]
     rotation: 0
     state: enabled
 - name: virtual_sink_2
@@ -1252,18 +1248,18 @@ connections:
 - [blocks_add_const_vxx_0, '0', blocks_vco_c_0, '0']
 - [blocks_add_const_vxx_1, '0', digital_binary_slicer_fb_0, '0']
 - [blocks_file_source_0, '0', blocks_vector_to_stream_0, '0']
+- [blocks_message_strobe_0, strobe, pdu_pdu_to_tagged_stream_0, pdus]
 - [blocks_multiply_const_vxx_0, '0', blocks_add_const_vxx_0, '0']
 - [blocks_repeat_0, '0', blocks_throttle2_0, '0']
 - [blocks_selector_0, '0', blocks_null_sink_0, '0']
 - [blocks_selector_0, '1', virtual_sink_3, '0']
 - [blocks_stream_to_tagged_stream_0, '0', digital_crc32_bb_0, '0']
 - [blocks_throttle2_0, '0', blocks_uchar_to_float_1, '0']
-- [blocks_throttle2_2, '0', pdu_tagged_stream_to_pdu_0, '0']
 - [blocks_uchar_to_float_1, '0', blocks_multiply_const_vxx_0, '0']
 - [blocks_vco_c_0, '0', virtual_sink_0, '0']
 - [blocks_vector_to_stream_0, '0', blocks_stream_to_tagged_stream_0, '0']
 - [digital_binary_slicer_fb_0, '0', virtual_sink_2, '0']
-- [digital_crc32_bb_0, '0', blocks_throttle2_2, '0']
+- [digital_crc32_bb_0, '0', pdu_tagged_stream_to_pdu_0, '0']
 - [digital_crc32_bb_0_0, '0', blocks_file_sink_0, '0']
 - [digital_crc32_bb_0_0, '0', blocks_tag_debug_0, '0']
 - [digital_symbol_sync_xx_0, '0', blocks_add_const_vxx_1, '0']
@@ -1275,7 +1271,7 @@ connections:
 - [pdu_pdu_to_tagged_stream_1, '0', digital_crc32_bb_0_0, '0']
 - [pdu_tagged_stream_to_pdu_0, pdus, satellites_hdlc_framer_0, in]
 - [satellites_hdlc_deframer_0, out, pdu_pdu_to_tagged_stream_1, pdus]
-- [satellites_hdlc_framer_0, out, pdu_pdu_to_tagged_stream_0, pdus]
+- [satellites_hdlc_framer_0, out, blocks_message_strobe_0, set_msg]
 - [virtual_source_0, '0', blocks_selector_0, '0']
 - [virtual_source_0_0, '0', freq_xlating_fir_filter_xxx_0, '0']
 - [virtual_source_1, '0', blocks_repeat_0, '0']
@@ -1286,4 +1282,4 @@ connections:
 
 metadata:
   file_format: 1
-  grc_version: 3.10.9.2
+  grc_version: 3.10.12.0
